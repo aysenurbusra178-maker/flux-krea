@@ -16,6 +16,14 @@ from pathlib import Path
 from typing import Any, Mapping
 
 
+RFC1918_NETWORKS = (
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+)
+IPV6_UNIQUE_LOCAL_NETWORK = ipaddress.ip_network("fc00::/7")
+
+
 @dataclass(frozen=True)
 class PromptReceipt:
     generation_id: str
@@ -56,6 +64,16 @@ class PromptReceipt:
         return cls(**payload)
 
 
+def _is_trusted_lan_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    if isinstance(address, ipaddress.IPv4Address):
+        return any(address in network for network in RFC1918_NETWORKS)
+
+    if address.ipv4_mapped is not None:
+        return _is_trusted_lan_address(address.ipv4_mapped)
+
+    return address in IPV6_UNIQUE_LOCAL_NETWORK
+
+
 def _is_allowed_host(hostname: str, allow_lan: bool, allow_remote: bool) -> bool:
     if hostname.lower() == "localhost":
         return True
@@ -67,11 +85,13 @@ def _is_allowed_host(hostname: str, allow_lan: bool, allow_remote: bool) -> bool
             addresses = {item[4][0] for item in socket.getaddrinfo(hostname, None)}
         except socket.gaierror:
             return False
-        return all(_is_allowed_host(address, allow_lan, allow_remote) for address in addresses)
+        return bool(addresses) and all(
+            _is_allowed_host(address, allow_lan, allow_remote) for address in addresses
+        )
 
     if address.is_loopback:
         return True
-    if allow_lan and address.is_private:
+    if allow_lan and _is_trusted_lan_address(address):
         return True
     return allow_remote
 
