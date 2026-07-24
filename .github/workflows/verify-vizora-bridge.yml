@@ -1,0 +1,31 @@
+name: Verify VIZORA Bridge
+
+on:
+  push:
+    branches:
+      - feat/vizora-prompt-learning-bridge
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run bridge tests
+        run: python -m unittest -v test_vizora_bridge.py
+
+      - name: Compile bridge and CLI
+        run: python -m py_compile vizora_bridge.py vizora_generate.py
